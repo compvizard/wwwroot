@@ -1,0 +1,22 @@
+{
+  "name": "opencvjs-getting-started-with-videos-adapted",
+  "version": "1.0.0",
+  "description": "click \"Open in New Window\" to use your camera; adapted from https://docs.opencv.org/3.4/dd/d00/tutorial_js_video_display.html",
+  "main": "index.html",
+  "scripts": {
+    "start": "parcel index.html --open",
+    "build": "postcss css/tailwind.css -o public/build/tailwind.css"
+  },
+  "dependencies": {
+    "autoprefixer": "^10.3.1",
+    "opencv.js": "1.2.1",
+    "postcss": "^8.3.6",
+    "postcss-cli": "^8.3.1",
+    "tailwindcss": "^2.2.6"
+  },
+  "devDependencies": {
+    "@babel/core": "7.2.0",
+    "parcel-bundler": "^1.6.1"
+  },
+  "keywords": []
+}

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script src="js/jquery-2.1.1.min.js"></script>
+    <script type="text/javascript" async src="js/opencv.js" onload="onOpenCvReady();"></script>
+    <script src="js/utils.js" type="text/javascript"></script>
+    <script src="js/detection-result.js" type="text/javascript"></script>
+    <script src="js/template-type.js" type="text/javascript"></script>
+    <script src="js/face-templates.js" type="text/javascript"></script>
+    <script src="js/face-tracker.js" type="text/javascript"></script>
+    <script type="text/javascript">
+        var netDet = undefined, netRecogn = undefined;
+        var persons = {};
+        var isRunning = false;
+        var isLockOn = false;
+        var face_tracker = {};
+
+        function run() {
+            isRunning = true;
+
+            face_tracker = new FaceTracker();
+            let video = document.getElementById("videoInput"); // video is the id of video tag            
+            let src = new cv.Mat(video.height, video.width, cv.CV_8UC4);
+            let dst = new cv.Mat(video.height, video.width, cv.CV_8UC1);
+            let frameRGB = new cv.Mat(video.height, video.width, cv.CV_8UC3);
+            let cap = new cv.VideoCapture(video);
+
+            // Get a permission from user to use a camera
+            navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+                .then(function (stream) {
+                    video.srcObject = stream;
+                    video.onloadedmetadata = function (e) {
+                        video.play();
+                    };
+                })
+                .catch(function (err) {
+                    console.log("An error occurred! " + err);
+                });
+
+            function processVideo() {
+                const FPS = 30;
+
+                try {
+                    if (!isRunning) {
+                        // clean and stop.
+                        src.delete();
+                        dst.delete();
+                        return;
+                    }
+                    let begin = Date.now();
+
+                    // start processing.
+                    cap.read(src);
+                    cv.cvtColor(src, frameRGB, cv.COLOR_RGBA2RGB);
+
+                    if (isLockOn) {
+                        var res = face_tracker.detect(frameRGB);
+                        if (res != null) {
+                            // TODO:
+                            dist = document.getElementById("distance");
+                            dist.innerHTML = res.distance.toFixed(1);
+                        }
+                        else {
+                            console.log("no distance measured");
+                        }
+                    }
+
+                    cv.imshow('canvasOutput', frameRGB);
+
+                    // TODO: resize
+                    // var ctx = document.getElementById("canvasOutput").getContext("2d");
+                    // ctx.canvas.width = window.innerWidth;
+                    // ctx.canvas.height = window.innerHeight;
+
+                    // schedule the next one.
+                    let delay = 1000 / FPS - (Date.now() - begin);
+                    setTimeout(processVideo, delay);
+                } catch (err) {
+                    console.error(err.message);
+                }
+            };
+
+            // schedule the first one.
+            setTimeout(processVideo, 0);
+
+            // prepare UI
+            button = document.getElementById('lockon').disabled = false;
+            unlockUi();
+        }
+
+        function lockUi() {
+            button = document.getElementById('lockon').innerText = "Unlock";
+            $('#status').html("");
+            face_tracker.lock();
+        }
+
+        function unlockUi() {
+            face_tracker.unlock();
+            button = document.getElementById('lockon').innerText = "Lock On";
+            $('#status').html("Stretch your arm to touch the camera, then click <b>Lock On</b> while facing the camera.");
+        }
+
+        function loadModels(callback) {
+            var utils = new Utils('');
+            var proto = 'https://raw.githubusercontent.com/opencv/opencv/master/samples/dnn/face_detector/deploy_lowres.prototxt';
+            var weights = 'https://raw.githubusercontent.com/opencv/opencv_3rdparty/dnn_samples_face_detector_20180205_fp16/res10_300x300_ssd_iter_140000_fp16.caffemodel';
+            var recognModel = 'https://raw.githubusercontent.com/pyannote/pyannote-data/master/openface.nn4.small2.v1.t7';
+            utils.createFileFromUrl('face_detector.prototxt', proto, () => {
+                document.getElementById('status').innerHTML = 'Downloading face_detector.caffemodel';
+                utils.createFileFromUrl('face_detector.caffemodel', weights, () => {
+                    document.getElementById('status').innerHTML = 'Downloading OpenFace model';
+                    utils.createFileFromUrl('face_recognition.t7', recognModel, () => {
+                        document.getElementById('status').innerHTML = '';
+                        netDet = cv.readNetFromCaffe('face_detector.prototxt', 'face_detector.caffemodel');
+                        netRecogn = cv.readNetFromTorch('face_recognition.t7');
+                        $('#status_label').html("Notice");
+                        callback();
+                    });
+                });
+            });
+        };
+
+        function onOpenCvReady() {
+            $('#status').html("OpenCV is loaded");
+            cv['onRuntimeInitialized'] = () => {
+                loadModels(run);  // Load models and run a pipeline;
+            };
+        }
+
+        function onLockOn() {
+            isLockOn = !isLockOn;
+            if (isLockOn) {
+                lockUi();
+            }
+            else {
+                unlockUi();
+            }
+        }
+
+        function onChange() {
+            var gender = $("#gender :selected").val();
+            if (gender == "Female") {
+                face_tracker.gender = genderType.FEMALE;
+            }
+            else {
+                face_tracker.gender = genderType.MALE;
+            }
+            console.log(gender);
+
+            var user_height = $("#user_height").val();
+            face_tracker.userHeight = user_height;
+            console.log(user_height);
+
+            if (isLockOn) {
+                unlockUi();
+            }
+        }
+    </script>
+    <style>
+        table,
+        th,
+        td {
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 15px;
+        }
+    </style>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Face Tracker</title>
+    <base href="/" />
+    <link href="https://unpkg.com/tailwindcss@^1.0/dist/tailwind.min.css" rel="stylesheet">
+    <!-- <link rel="stylesheet" href="build/tailwind.css"> -->
+    <!-- <link href="css/bootstrap/bootstrap.min.css" rel="stylesheet" /> -->
+    <!-- <link href="css/app.css" rel="stylesheet" /> -->
+</head>
+
+<body>
+    <div>
+        <canvas id="canvasOutput" style="background-color: lightblue;">
+        </canvas>
+    </div>
+    <video id="videoInput" width=1280 height=720 style="display: none;"></video>
+    <div>
+        <table>
+            <tr>
+                <td>
+                    <button
+                        class="disabled:opacity-50 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                        id="lockon" disabled onclick="onLockOn();">
+                        Lock On
+                    </button>
+                </td>
+                <td>
+                    <div
+                        class="inline-flex items-center bg-white leading-none text-purple-600 rounded-full p-2 shadow text-teal text-xl">
+                        <span
+                            class="inline-flex bg-red-600 text-white rounded-full h-6 px-3 justify-center items-center"
+                            id="dist_label">DIST</span>
+                        <span style="margin-left:16px" id="distance"></span>
+                    </div>
+                </td>
+                <td>
+                    <div class="p-2" id="status_box">
+                        <div
+                            class="inline-flex items-center bg-white leading-none text-purple-600 rounded-full p-2 shadow text-teal text-sm">
+                            <span
+                                class="inline-flex bg-indigo-600 text-white rounded-full h-6 px-3 justify-center items-center"
+                                id="status_label">Status</span>
+                            <span style="margin-left:16px" id="status"></span>
+                        </div>
+                    </div>
+                    <!-- <div id="status"></div> -->
+                </td>
+            </tr>
+        </table>
+    </div>
+    <div>
+        <table>
+            <tr>
+                <td>
+                    <div class="relative inline-flex">
+                        <svg class="w-2 h-2 absolute top-0 right-0 m-4 pointer-events-none"
+                            xmlns="http://www.w3.org/2000/svg" viewBox="0 0 412 232">
+                            <path
+                                d="M206 171.144L42.678 7.822c-9.763-9.763-25.592-9.763-35.355 0-9.763 9.764-9.763 25.592 0 35.355l181 181c4.88 4.882 11.279 7.323 17.677 7.323s12.796-2.441 17.678-7.322l181-181c9.763-9.764 9.763-25.592 0-35.355-9.763-9.763-25.592-9.763-35.355 0L206 171.144z"
+                                fill="#648299" fill-rule="nonzero" />
+                        </svg>
+                        <select id="gender"
+                            class="border border-gray-300 rounded-full text-gray-600 h-10 pl-5 pr-10 bg-white hover:border-gray-400 focus:outline-none appearance-none"
+                            onchange="onChange();">
+                            <option selected>Male</option>
+                            <option>Female</option>
+                        </select>
+                    </div>
+                </td>
+                <td>
+                    <form>
+                        <label for="user_height">Height (cm):</label>
+                        <input type="number" id="user_height" name="user_height" min="100" max="200" value="175"
+                            class="border border-gray-300 rounded-full text-gray-600 h-10 pl-5 pr-10 bg-white hover:border-gray-400 focus:outline-none appearance-none"
+                            onchange="onChange();"><br>
+                    </form>
+                </td>
+                <td>
+                    <div class="relative inline-flex">
+                        <svg class="w-2 h-2 absolute top-0 right-0 m-4 pointer-events-none"
+                            xmlns="http://www.w3.org/2000/svg" viewBox="0 0 412 232">
+                            <path
+                                d="M206 171.144L42.678 7.822c-9.763-9.763-25.592-9.763-35.355 0-9.763 9.764-9.763 25.592 0 35.355l181 181c4.88 4.882 11.279 7.323 17.677 7.323s12.796-2.441 17.678-7.322l181-181c9.763-9.764 9.763-25.592 0-35.355-9.763-9.763-25.592-9.763-35.355 0L206 171.144z"
+                                fill="#648299" fill-rule="nonzero" />
+                        </svg>
+                        <select
+                            class="border border-gray-300 rounded-full text-gray-600 h-10 pl-5 pr-10 bg-white hover:border-gray-400 focus:outline-none appearance-none">
+                            <option selected>Nearer 10%</option>
+                            <option selected>Nearer 5%</option>
+                            <option selected>Default</option>
+                            <option>Farther 5%</option>
+                            <option>Farther 10%</option>
+                        </select>
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </div>
+</body>
+
+</html>
